@@ -125,10 +125,14 @@ button, a { -webkit-tap-highlight-color: transparent; }
   z-index: -2;
   object-fit: cover;
   object-position: 70% center;
+  opacity: 0;
+  filter: contrast(1.18) saturate(1.14) brightness(.96);
+  transition: opacity 900ms ease;
 }
+.mainframe-video.is-ready { opacity: 1; }
 .mainframe-wash {
   z-index: -1;
-  background: linear-gradient(90deg, rgba(248, 248, 245, .82) 0%, rgba(248, 248, 245, .34) 53%, rgba(248, 248, 245, .1) 100%);
+  background: linear-gradient(90deg, rgba(248, 248, 245, .24) 0%, rgba(248, 248, 245, .06) 53%, rgba(248, 248, 245, .015) 100%);
   pointer-events: none;
 }
 
@@ -271,7 +275,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   .mainframe-desktop-links, .desktop-contact { display: none; }
   .mainframe-menu-button { display: block; }
   .mainframe-hero { align-items: flex-end; padding: 0 20px 48px; }
-  .mainframe-wash { background: linear-gradient(180deg, rgba(248, 248, 245, .25) 0%, rgba(248, 248, 245, .86) 70%, rgba(248, 248, 245, .96) 100%); }
+  .mainframe-wash { background: linear-gradient(180deg, rgba(248, 248, 245, .12) 0%, rgba(248, 248, 245, .22) 70%, rgba(248, 248, 245, .38) 100%); }
   .mainframe-intro, .mainframe-typewriter { font-size: clamp(18px, 5vw, 24px); }
   .mainframe-pill { font-size: 13px; padding-inline: 16px; }
 }

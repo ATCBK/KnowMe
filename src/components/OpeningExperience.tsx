@@ -42,6 +42,7 @@ function MainframeLanding() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [pillsVisible, setPillsVisible] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [videoReady, setVideoReady] = useState(false);
   const { displayed, done } = useTypewriter(HERO_COPY);
 
   useEffect(() => {
@@ -82,6 +83,10 @@ function MainframeLanding() {
     if (video) targetTimeRef.current = video.currentTime;
   }
 
+  function handleCanPlay() {
+    setVideoReady(true);
+  }
+
   function handleSeeked() {
     const video = videoRef.current;
     if (!video) return;
@@ -108,12 +113,13 @@ function MainframeLanding() {
     <section className="mainframe-home" aria-label="Mainframe creative agency">
       <video
         ref={videoRef}
-        className="mainframe-video"
+        className={`mainframe-video ${videoReady ? "is-ready" : ""}`}
         src={VIDEO_SOURCE}
         muted
         playsInline
         preload="auto"
         onLoadedMetadata={handleLoadedMetadata}
+        onCanPlay={handleCanPlay}
         onSeeked={handleSeeked}
         aria-hidden="true"
       />
