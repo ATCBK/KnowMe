@@ -136,7 +136,9 @@ export default function OpeningExperience() {
         <div className="intro-copy">
           <p className="intro-kicker">Personal interview uplink / 01</p>
           <h1 className="intro-title">KnowMe</h1>
-          <p className="intro-subtitle">Resume distilled into a conversation</p>
+          <p className="intro-subtitle">
+            你好，这是我的数字孪生体。你可以问它任何你感兴趣的关于我的事情。基于 Agent Harness 工程构建。
+          </p>
           <button className="intro-skip" type="button" onClick={() => setEntered(true)}>
             Enter conversation →
           </button>
