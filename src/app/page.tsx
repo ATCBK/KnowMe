@@ -1,5 +1,5 @@
-import InterviewAgent from "@/components/InterviewAgent";
+import OpeningExperience from "@/components/OpeningExperience";
 
 export default function HomePage() {
-  return <InterviewAgent />;
+  return <OpeningExperience />;
 }
