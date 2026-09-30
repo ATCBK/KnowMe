@@ -1,46 +1,51 @@
 # KnowMe
 
-> A personal site that is also a conversation. Visitors read my blog **and** chat with an AI agent that carries my full context — résumé, projects, writing, and how I think.
+> 一个给面试官使用的个人 AI Agent 入口。
 
-个人博客 + 一个「懂我」的 AI Agent。访客可以直接和它对话，快速了解我。
+KnowMe 不是复杂的个人网站，而是一个可以直接提问的单页 Agent。访客打开页面后，可以像面试一样询问我的经历、项目、能力和求职方向，Agent 会基于我的公开资料自动回答。
 
 ## How it works
 
 ```
-content/           ← everything the agent knows, in Markdown
-├── profile.md     ← who I am, how I talk, what I care about  (agent core)
-├── resume.md      ← résumé                                    (agent + /resume page)
-└── posts/*.md     ← blog posts                                (agent + /blog)
-
-src/app/api/chat   ← streams replies from any OpenAI-compatible LLM
+content/profile.md   ← 我的身份、表达方式和个人背景
+content/resume.md    ← 我的经历、项目和技能
+content/posts/*.md   ← 可补充的公开文章和思考
+src/app/api/chat     ← 读取这些内容并调用 OpenAI-compatible LLM
 ```
 
-The same Markdown files render the website **and** are compiled into the agent's system prompt at request time. Edit one file, both update.
+页面只有一个入口：`/`。旧的博客、简历和对话地址会自动回到首页。
 
 ## Run locally
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in your LLM key
-npm run dev                  # http://localhost:3000
+cp .env.example .env.local
+npm run dev
 ```
 
-## Deploy (Vercel)
+打开 <http://localhost:3000>，即可进入 Agent 页面。
 
-1. Import this repo on [vercel.com/new](https://vercel.com/new).
-2. Add env vars `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` (see `.env.example`).
-3. Deploy. Done.
+## Environment variables
+
+在 `.env.local` 中配置：
+
+```bash
+LLM_API_KEY=your-key
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-chat
+LLM_MAX_TOKENS=1024
+```
+
+支持任意 OpenAI-compatible 服务，例如 DeepSeek、通义千问、智谱和 Moonshot。
 
 ## Customize
 
-- Replace the placeholders in `content/profile.md` and `content/resume.md`.
-- Add posts under `content/posts/` with frontmatter `title`, `date`, `summary`, `lang` (`zh` | `en`).
-- Site-wide strings live in `src/lib/i18n.ts`.
+只需要编辑 `content/profile.md` 和 `content/resume.md`，Agent 的回答内容就会随之更新。不要把不适合公开的信息写入这些文件，因为仓库是公开的。
 
-## Privacy note
+## Deploy
 
-This repo is public. Keep anything you wouldn't put on a public résumé out of `content/`.
+可以直接导入 Vercel，并在项目设置中配置同名环境变量。
 
 ## Stack
 
-Next.js 15 (App Router) · TypeScript · Tailwind CSS v4 · any OpenAI-compatible LLM (DeepSeek / Qwen / GLM / …) · Vercel
+Next.js 15 · TypeScript · Tailwind CSS · OpenAI-compatible LLM · Vercel
