@@ -4,14 +4,49 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
+const MAX_HISTORY = 20;
+const MAX_MESSAGE_CHARS = 4_000;
+const MAX_TOKENS = 1_024;
+
+function getTextContent(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((part) => {
+      if (typeof part === "string") return part;
+      if (typeof part === "object" && part !== null && "text" in part) {
+        const text = (part as { text?: unknown }).text;
+        return typeof text === "string" ? text : "";
+      }
+      return "";
+    })
+    .join("");
+}
+
+function getDelta(payload: unknown): string {
+  if (typeof payload !== "object" || payload === null) return "";
+  const choices = (payload as { choices?: unknown }).choices;
+  if (!Array.isArray(choices) || !choices[0] || typeof choices[0] !== "object") return "";
+  const choice = choices[0] as { delta?: { content?: unknown }; message?: { content?: unknown } };
+  return getTextContent(choice.delta?.content ?? choice.message?.content);
+}
+
+function readErrorDetail(payload: string) {
+  try {
+    const parsed = JSON.parse(payload) as { error?: { message?: unknown } };
+    return typeof parsed.error?.message === "string" ? parsed.error.message : "";
+  } catch {
+    return "";
+  }
+}
 
 export async function POST(request: Request) {
-  const apiKey = process.env.LLM_API_KEY;
-  const baseUrl = (process.env.LLM_BASE_URL ?? "https://api.deepseek.com/v1").replace(/\/$/, "");
-  const model = process.env.LLM_MODEL ?? "deepseek-chat";
+  const apiKey = process.env.AGENT_API_KEY ?? process.env.LLM_API_KEY;
+  const baseUrl = (process.env.AGENT_BASE_URL ?? process.env.LLM_BASE_URL ?? "https://api.deepseek.com").replace(/\/$/, "");
+  const model = process.env.AGENT_MODEL ?? process.env.LLM_MODEL ?? "deepseek-flash";
 
   if (!apiKey) {
-    return new Response("Server is missing LLM_API_KEY.", { status: 500 });
+    return new Response("Agent is not configured. Set AGENT_API_KEY and AGENT_BASE_URL.", { status: 503 });
   }
 
   let messages: ChatMessage[];
@@ -26,8 +61,8 @@ export async function POST(request: Request) {
           ((message as ChatMessage).role === "user" || (message as ChatMessage).role === "assistant") &&
           typeof (message as ChatMessage).content === "string",
       )
-      .slice(-20)
-      .map((message) => ({ ...message, content: message.content.slice(0, 4000) }));
+      .slice(-MAX_HISTORY)
+      .map((message) => ({ role: message.role, content: message.content.trim().slice(0, MAX_MESSAGE_CHARS) }));
   } catch {
     return new Response("Invalid request body.", { status: 400 });
   }
@@ -36,15 +71,27 @@ export async function POST(request: Request) {
     return new Response("Last message must be from the user.", { status: 400 });
   }
 
-  const upstream = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model, stream: true, max_tokens: 1024, temperature: 0.7, messages: [{ role: "system", content: buildSystemPrompt() }, ...messages] }),
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, stream: true, max_tokens: MAX_TOKENS, temperature: 0.7, messages: [{ role: "system", content: buildSystemPrompt() }, ...messages] }),
+      signal: AbortSignal.timeout(60_000),
+    });
+  } catch (error) {
+    console.error("Agent request failed", error);
+    return new Response("Agent request failed.", { status: 502 });
+  }
 
-  if (!upstream.ok || !upstream.body) {
-    console.error("LLM upstream error", upstream.status);
-    return new Response("Upstream model error.", { status: 502 });
+  if (!upstream.ok) {
+    const detail = await upstream.text().catch(() => "");
+    console.error("Agent upstream error", upstream.status, readErrorDetail(detail));
+    return new Response("Agent upstream error.", { status: 502 });
+  }
+
+  if (!upstream.body) {
+    return new Response("Agent returned no response body.", { status: 502 });
   }
 
   const decoder = new TextDecoder();
@@ -58,7 +105,7 @@ export async function POST(request: Request) {
           const { done, value } = await reader.read();
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
+          const lines = buffer.split(/\r?\n/);
           buffer = lines.pop() ?? "";
           for (const raw of lines) {
             const line = raw.trim();
@@ -67,10 +114,22 @@ export async function POST(request: Request) {
             if (data === "[DONE]") continue;
             try {
               const json = JSON.parse(data);
-              const delta = json.choices?.[0]?.delta?.content;
-              if (typeof delta === "string") controller.enqueue(encoder.encode(delta));
+              const delta = getDelta(json);
+              if (delta) controller.enqueue(encoder.encode(delta));
             } catch {
-              // Ignore malformed SSE chunks.
+              // Providers occasionally emit comments or partial events; skip them safely.
+            }
+          }
+        }
+        buffer += decoder.decode();
+        if (buffer.trim().startsWith("data:")) {
+          const data = buffer.trim().slice(5).trim();
+          if (data && data !== "[DONE]") {
+            try {
+              const delta = getDelta(JSON.parse(data));
+              if (delta) controller.enqueue(encoder.encode(delta));
+            } catch {
+              // Ignore an incomplete final event.
             }
           }
         }
