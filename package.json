@@ -1,16 +1,14 @@
 {
   "name": "knowme",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "A personal blog + an AI agent that knows my full context, so visitors can chat with 'me'.",
+  "description": "A minimal personal resume Q&A agent with a CRT opening animation.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "start": "next start"
   },
   "dependencies": {
-    "gray-matter": "^4.0.3",
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
@@ -18,12 +16,9 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.0",
-    "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.0.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "tailwindcss": "^4.1.0",
     "typescript": "^5.8.0"
   }
 }

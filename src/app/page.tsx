@@ -1,18 +1,5 @@
-import Chat from "@/components/Chat";
-import { getProfile } from "@/lib/content";
+import InterviewAgent from "@/components/InterviewAgent";
 
-export default function Home() {
-  const profile = getProfile();
-
-  return (
-    <main className="min-h-screen px-5 sm:px-8">
-      <Chat
-        name={profile.name}
-        title={profile.title}
-        location={profile.location}
-        github={profile.github}
-        email={profile.email}
-      />
-    </main>
-  );
+export default function HomePage() {
+  return <InterviewAgent />;
 }
