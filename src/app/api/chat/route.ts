@@ -1,4 +1,5 @@
 import { buildSystemPrompt } from "@/lib/profile";
+import { buildMemoryContext } from "@/lib/memory-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -6,7 +7,7 @@ export const dynamic = "force-dynamic";
 type ChatMessage = { role: "user" | "assistant"; content: string };
 const MAX_HISTORY = 20;
 const MAX_MESSAGE_CHARS = 4_000;
-const MAX_TOKENS = 1_024;
+const MAX_TOKENS = 160;
 
 function getTextContent(value: unknown): string {
   if (typeof value === "string") return value;
@@ -73,10 +74,12 @@ export async function POST(request: Request) {
 
   let upstream: Response;
   try {
+    const latestQuestion = messages.filter((message) => message.role === "user").at(-1)?.content ?? "";
+    const memoryContext = await buildMemoryContext(latestQuestion);
     upstream = await fetch(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, stream: true, max_tokens: MAX_TOKENS, temperature: 0.7, messages: [{ role: "system", content: buildSystemPrompt() }, ...messages] }),
+      body: JSON.stringify({ model, stream: true, max_tokens: MAX_TOKENS, temperature: 0.7, messages: [{ role: "system", content: buildSystemPrompt(memoryContext) }, ...messages] }),
       signal: AbortSignal.timeout(60_000),
     });
   } catch (error) {

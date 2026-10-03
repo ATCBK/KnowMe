@@ -2,15 +2,16 @@
 
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { CrtBackground } from "@/shaders/crt/CrtBackground";
+import { siteProfile } from "@/lib/profile";
 
 type Message = { role: "user" | "assistant"; content: string };
 type Bubble = { id: number; text: string; tone: "welcome" | "answer" | "error"; anchor: number };
+const MAX_VISIBLE_REPLY_CHARS = 30;
 
 const CONFIG = {
-  welcome: "你好，想从哪儿聊起？",
-  placeholder: "有什么想问我的吗？",
+  placeholder: "想了解我什么？从这里开始聊聊…",
   suggestions: ["最近在折腾什么？", "你做过哪些有意思的东西？", "遇到一个新想法，你一般怎么判断值不值得做？"],
-  maxBubbles: 3,
+  maxBubbles: 1,
   maxInputLines: 3,
 } as const;
 
@@ -37,6 +38,14 @@ async function* realStream(messages: Message[], signal: AbortSignal) {
   }
   const rest = decoder.decode();
   if (rest) yield rest;
+}
+
+function shortenBubbleText(source: string) {
+  const text = source.replace(/\s+/g, " ").replace(/\*\*/g, "").trim();
+  if (text.length <= MAX_VISIBLE_REPLY_CHARS) return text;
+  const sentenceEnd = text.search(/[。！？!?；;]/);
+  if (sentenceEnd >= 0 && sentenceEnd < MAX_VISIBLE_REPLY_CHARS) return text.slice(0, sentenceEnd + 1);
+  return `${text.slice(0, MAX_VISIBLE_REPLY_CHARS - 1).trimEnd()}…`;
 }
 
 function BackgroundAndCompanion() {
@@ -67,44 +76,56 @@ function BackgroundAndCompanion() {
   </div>;
 }
 
-function LeftContext({ started, currentQuestion, onSuggestion, materialVisible, onBackToIntro }: {
-  started: boolean;
-  currentQuestion: string;
-  onSuggestion: (question: string) => void;
-  materialVisible: boolean;
-  onBackToIntro: () => void;
-}) {
-  const showMaterial = materialVisible && started;
+type ProfilePanel = "about" | "projects" | "skills" | "resume" | "contact";
+const PANEL_TITLES: Record<ProfilePanel, string> = {
+  about: "认识一下我。", projects: "做过的东西。", skills: "我的工具箱。", resume: "我的简历。", contact: "保持联系。",
+};
+
+function LeftContext({ onChat, onContact }: { onChat: () => void; onContact: () => void }) {
   return (
-    <section className={`left-context ${started ? "is-started" : ""}`} aria-live="polite">
-      {showMaterial ? (
-        <div className="material-view">
-          <button className="back-link" type="button" onClick={onBackToIntro}>← 返回介绍</button>
-          <p className="context-label">当前话题</p>
-          <h2>{currentQuestion}</h2>
-          <p className="material-copy">这里会显示与话题对应的公开项目或笔记。当前仓库还没有可展示的真实项目素材，回答仍会照常进行。</p>
-          <div className="material-placeholder" aria-label="暂无公开项目素材"><span>资料素材待补充</span></div>
+    <section className="left-context" aria-label="个人介绍">
+      <div className="intro-copy-block">
+        <h1><span>Hi, I’m</span><span className="intro-name">{siteProfile.displayName}<span className="name-period">.</span></span></h1>
+        <p className="personal-description">{siteProfile.introduction}<br />{siteProfile.invitation}</p>
+      </div>
+      <div className="intro-actions">
+        <p>想再多了解我一点？</p>
+        <div className="intro-action-links">
+          <button className="intro-contact" type="button" onClick={onContact}><span className="action-avatar" aria-hidden="true">↗</span><span><strong>联系我</strong><small>直接和我聊聊</small></span></button>
+          <span className="action-or">或</span>
+          <button className="intro-contact" type="button" onClick={onChat}><span className="action-avatar agent-avatar" aria-hidden="true">✳</span><span><strong>和分身聊聊</strong><small>一个了解我的 AI 朋友</small></span></button>
         </div>
-      ) : (
-        <div className="intro-context">
-          <div className="intro-copy-block">
-            <h1>关于我，问它。</h1>
-            <p>这是我的 AI 分身。<br />我的经历、做过的东西，还有一些想法，都可以和它聊。</p>
-          </div>
-          <div className="suggestions" aria-label="推荐问题">
-            {CONFIG.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => onSuggestion(suggestion)}>{suggestion}<span>↗</span></button>)}
-          </div>
-          {started && <p className="context-status">正在聊：{currentQuestion}</p>}
-        </div>
-      )}
+      </div>
     </section>
   );
 }
 
-function BubbleLayer({ bubbles, waiting }: { bubbles: Bubble[]; waiting: boolean }) {
+function ProfileDetails({ panel, onClose, onQuestion }: { panel: ProfilePanel | null; onClose: () => void; onQuestion: (question: string) => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (panel && !dialog.open) dialog.showModal();
+    if (!panel && dialog.open) dialog.close();
+  }, [panel]);
+
+  return <dialog ref={dialogRef} className="profile-dialog" aria-labelledby="profile-dialog-title" onCancel={onClose} onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    {panel && <div className="profile-dialog-content">
+      <div className="panel-heading"><span className="panel-kicker">A LITTLE MORE ABOUT ME</span><button className="panel-close" type="button" aria-label="关闭资料" onClick={onClose}>×</button></div>
+      <h2 id="profile-dialog-title">{PANEL_TITLES[panel]}</h2>
+      {panel === "about" && <><p>{siteProfile.about}</p><button className="panel-question" type="button" onClick={() => onQuestion("请简单介绍一下你自己。")}>让分身介绍一下我 <span>↗</span></button></>}
+      {panel === "projects" && <>{siteProfile.projects.map((project) => <article className="project-entry" key={project.name}><p className="project-category">{project.category}</p><h3>{project.name}</h3><p>{project.description}</p><span className="project-technologies">{project.technologies}</span></article>)}<button className="panel-question" type="button" onClick={() => onQuestion("介绍一下 KnowMe 这个项目和它的技术选择。")}>聊聊这个项目 <span>↗</span></button></>}
+      {panel === "skills" && <>{siteProfile.skills.length ? <ul className="skill-list">{siteProfile.skills.map((skill) => <li key={skill}>{skill}</li>)}</ul> : <p>我的技能介绍还在整理中。你可以先看看这个网站，或者问问我的分身。</p>}<button className="panel-question" type="button" onClick={() => onQuestion("这个网站用了什么技术？")}>聊聊技术与工作方式 <span>↗</span></button></>}
+      {panel === "resume" && <>{siteProfile.resumeUrl ? <><p>想完整了解我的经历？可以下载我的简历，慢慢看。</p><a className="panel-question" href={siteProfile.resumeUrl} download target="_blank" rel="noopener noreferrer">下载简历 <span>↓</span></a></> : <><p>简历正在整理，暂时还没有可下载的版本。</p><p className="panel-secondary">你可以先了解我的项目，或和我的分身聊聊。</p><button className="panel-question" type="button" onClick={() => onQuestion("我想了解你的公开经历。")}>先聊聊我的经历 <span>↗</span></button></>}</>}
+      {panel === "contact" && <>{siteProfile.email ? <><p>关于工作、项目，或者一个有趣的想法，都欢迎来聊。</p><a className="panel-question" href={`mailto:${siteProfile.email}`}>{siteProfile.email} <span>↗</span></a></> : <><p>联系方式还没有公开。你可以先留下想聊的话题，和我的 AI 分身开始一次对话。</p><button className="panel-question" type="button" onClick={() => { onClose(); document.querySelector<HTMLTextAreaElement>(".chat-form textarea")?.focus(); }}>开始聊聊 <span>↗</span></button></>}</>}
+    </div>}
+  </dialog>;
+}
+
+function BubbleLayer({ bubbles, hidden }: { bubbles: Bubble[]; hidden: boolean }) {
+  if (hidden) return null;
   return (
     <div className="bubble-layer" aria-live="polite" aria-atomic="false">
-      {waiting && <div className="answer-bubble waiting-bubble" role="status" aria-label="正在等待回复"><span /><span /><span /></div>}
       {bubbles.map((bubble) => <div key={bubble.id} className={`answer-bubble ${bubble.tone === "welcome" ? "welcome-bubble" : ""} ${bubble.tone === "error" ? "error-bubble" : ""} bubble-anchor-${bubble.anchor}`} role={bubble.tone === "answer" ? "status" : undefined}>{bubble.text}</div>)}
     </div>
   );
@@ -153,11 +174,11 @@ function KnowMeChat() {
   const [input, setInput] = useState("");
   const [started, setStarted] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [waiting, setWaiting] = useState(false);
-  const [bubbles, setBubbles] = useState<Bubble[]>([{ id: 0, text: CONFIG.welcome, tone: "welcome", anchor: 0 }]);
+  const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [currentQuestion, setCurrentQuestion] = useState("");
   const [error, setError] = useState("");
   const [materialVisible, setMaterialVisible] = useState(false);
+  const [profilePanel, setProfilePanel] = useState<ProfilePanel | null>(null);
   const historyRef = useRef<Message[]>([]);
   const controllerRef = useRef<AbortController | null>(null);
   const turnRef = useRef(0);
@@ -177,14 +198,14 @@ function KnowMeChat() {
     setBubbles((current) => [...current, { id: bubbleIdRef.current++, text, tone, anchor: tone === "answer" ? (bubbleIdRef.current - 1) % 3 : 0 }].slice(-CONFIG.maxBubbles));
   }, []);
 
-  const updateAnswerBubble = useCallback((text: string) => {
+  const updateAnswerBubble = useCallback((text: string, anchor: number) => {
     if (!mountedRef.current) return;
     setBubbles((current) => {
       const last = current.at(-1);
       if (last?.tone === "answer") {
         return [...current.slice(0, -1), { ...last, text }];
       }
-      return [...current, { id: bubbleIdRef.current++, text, tone: "answer" as const, anchor: (bubbleIdRef.current - 1) % 3 }].slice(-CONFIG.maxBubbles);
+      return [{ id: bubbleIdRef.current++, text, tone: "answer" as const, anchor }].slice(-CONFIG.maxBubbles);
     });
   }, []);
 
@@ -193,7 +214,6 @@ function KnowMeChat() {
     controllerRef.current?.abort();
     controllerRef.current = null;
     setBusy(false);
-    setWaiting(false);
   }, []);
 
   const sendQuestion = useCallback(async (rawQuestion: string, retry = false) => {
@@ -201,6 +221,7 @@ function KnowMeChat() {
     if (!question || (busy && !retry)) return;
     stopCurrent();
     const turn = turnRef.current;
+    const answerAnchor = turn % 3;
     const controller = new AbortController();
     controllerRef.current = controller;
     setInput("");
@@ -210,7 +231,6 @@ function KnowMeChat() {
     setMaterialVisible(/项目|作品|做过|资料/.test(question));
     setBubbles([]);
     setBusy(true);
-    setWaiting(true);
     const nextHistory = retry ? historyRef.current : [...historyRef.current, { role: "user" as const, content: question }];
     historyRef.current = nextHistory;
     try {
@@ -219,17 +239,16 @@ function KnowMeChat() {
       for await (const chunk of stream) {
         if (turnRef.current !== turn) return;
         answer += chunk;
-        setWaiting(false);
-        updateAnswerBubble(answer);
+        const shortAnswer = shortenBubbleText(answer);
+        if (shortAnswer) updateAnswerBubble(shortAnswer, answerAnchor);
       }
       if (!answer.trim()) throw new Error("Agent returned an empty response.");
       if (historyRef.current.at(-1)?.role !== "assistant") historyRef.current = [...historyRef.current, { role: "assistant", content: answer.trim() }];
-      if (turnRef.current === turn) { setBusy(false); setWaiting(false); }
+      if (turnRef.current === turn) setBusy(false);
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === "AbortError") return;
       if (turnRef.current !== turn) return;
       setBusy(false);
-      setWaiting(false);
       const message = reason instanceof Error ? reason.message : "这次回复没有完成，可以再试一次。";
       setError(message);
       pushBubble("刚才没有连上，等你再问我一次。", "error");
@@ -242,8 +261,9 @@ function KnowMeChat() {
     <main className={`knowme-shell ${started ? "is-started" : ""}`}>
       <BackgroundAndCompanion />
       <div className="brand-mark" aria-label="KnowMe">knowme<span>↗</span></div>
-      <LeftContext started={started} currentQuestion={currentQuestion} onSuggestion={sendQuestion} materialVisible={materialVisible} onBackToIntro={() => setMaterialVisible(false)} />
-      <BubbleLayer bubbles={bubbles} waiting={waiting} />
+      <LeftContext onChat={() => { setStarted(true); requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>(".chat-form textarea")?.focus()); }} onContact={() => setProfilePanel("contact")} />
+      <ProfileDetails panel={profilePanel} onClose={() => setProfilePanel(null)} onQuestion={(question) => { setProfilePanel(null); sendQuestion(question); }} />
+      <BubbleLayer bubbles={bubbles} hidden={input.trim().length > 0} />
       <div className="companion-caption" aria-hidden="true">a little more like me</div>
       <ChatInput value={input} busy={busy} currentQuestion={currentQuestion} error={error} onChange={setInput} onSubmit={() => sendQuestion(input)} onStop={stopCurrent} onRetry={retry} />
     </main>
